@@ -1,0 +1,19 @@
+// sequence of fields in "filter" table
+#define	FILT_userid	0
+#define	FILT_id	1
+#define	FILT_rcpt	2
+#define	FILT_sender	3
+#define	FILT_subject	4
+#define	FILT_headerf	5
+#define	FILT_headerv	6
+#define	FILT_rcptytpe	7
+#define FILT_sendertype	8
+#define FILT_subjecttype 9
+#define FILT_headertype	10
+#define FILT_action	11
+#define FILT_resultscode	12
+#define FILT_xresultcode	13
+#define FILT_resultmsg	14
+#define FILT_prio	15
+#define FILT_endts	16
+#define FILT_forward	17
