@@ -1,0 +1,19 @@
+			      Disclaimer
+
+Please note:
+
+FlexiMilter does not come with any waranty, either explicit or
+implied, as to functionality, features or correctness. There may very
+well (or likely) be errors in the code, albeit I can state that I have
+been using it on my own mailserver for about 2 years, and the current
+main code file has been in continuous use and unchanged since over 11
+months. I am not aware of any unintentionally lost mails (though take
+credit for intentionally losing - or rather rejecting - lots of
+unwanted mails through the filtering mechanisms implemented).
+
+There is still quite a bit of work especially in the department of
+code cleanup and documentation, as this was originally mainly intended
+as a quick hack. Especially the multi-tenancy is as of current only
+partially implemented (web frontend for other user's config
+limitations isn't programmed yet, as it was not needed by myself yet).
+
