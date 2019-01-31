@@ -119,3 +119,4 @@ INSERT INTO `user` VALUES (1,'admin','admin@localhost',sha256("admin",256),'A');
 UNLOCK TABLES;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
+
