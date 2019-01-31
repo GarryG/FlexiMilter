@@ -1,0 +1,198 @@
+.navbar-default {
+  background-color: #b2ffb8;
+  border-color: #7dd985;
+}
+.navbar-default .navbar-brand {
+	color: #000000;
+	background-image: ../media/logo.png;
+}
+.navbar-default .navbar-brand:hover,
+.navbar-default .navbar-brand:focus {
+  color: #08034e;
+}
+.navbar-default .navbar-text {
+  color: #000000;
+}
+.navbar-default .navbar-nav > li > a {
+  color: #000000;
+}
+.navbar-default .navbar-nav > li > a:hover,
+.navbar-default .navbar-nav > li > a:focus {
+  color: #08034e;
+}
+.navbar-default .navbar-nav > li > .dropdown-menu {
+  background-color: #b2ffb8;
+}
+.navbar-default .navbar-nav > li > .dropdown-menu > li > a {
+  color: #000000;
+}
+.navbar-default .navbar-nav > li > .dropdown-menu > li > a:hover,
+.navbar-default .navbar-nav > li > .dropdown-menu > li > a:focus {
+  color: #08034e;
+  background-color: #7dd985;
+}
+.navbar-default .navbar-nav > li > .dropdown-menu > li > .divider {
+  background-color: #7dd985;
+}
+.navbar-default .navbar-nav .open .dropdown-menu > .active > a,
+.navbar-default .navbar-nav .open .dropdown-menu > .active > a:hover,
+.navbar-default .navbar-nav .open .dropdown-menu > .active > a:focus {
+  color: #08034e;
+  background-color: #7dd985;
+}
+.navbar-default .navbar-nav > .active > a,
+.navbar-default .navbar-nav > .active > a:hover,
+.navbar-default .navbar-nav > .active > a:focus {
+  color: #08034e;
+  background-color: #7dd985;
+}
+.navbar-default .navbar-nav > .open > a,
+.navbar-default .navbar-nav > .open > a:hover,
+.navbar-default .navbar-nav > .open > a:focus {
+  color: #08034e;
+  background-color: #7dd985;
+}
+.navbar-default .navbar-toggle {
+  border-color: #7dd985;
+}
+.navbar-default .navbar-toggle:hover,
+.navbar-default .navbar-toggle:focus {
+  background-color: #7dd985;
+}
+.navbar-default .navbar-toggle .icon-bar {
+  background-color: #000000;
+}
+.navbar-default .navbar-collapse,
+.navbar-default .navbar-form {
+  border-color: #000000;
+}
+.navbar-default .navbar-link {
+  color: #000000;
+}
+.navbar-default .navbar-link:hover {
+  color: #08034e;
+}
+.navbar-brand  {
+	background-image: url(../media/logo.png);
+	background-repeat: no-repeat;
+	background-size: auto 40px;
+	min-width: 136px;
+	margin-top: 0px;
+	background-position: 10px 5px;
+}
+#mainpage {
+	height: 100%;
+	min-width: 400px;
+	vertical-align: middle;
+}
+#loginwindow {
+	border-style: none;
+	border-color: #808080;
+	padding-top: 20px;
+	padding-bottom: 20px;
+	padding-right: 20px;
+	padding-left: 20px;
+	margin-top: 0px;
+	margin-right: 0px;
+	margin-bottom: 0px;
+	margin-left: 0px;
+	-webkit-box-shadow: 6px 6px 10px 4px #B8B8B8;
+	box-shadow: 6px 6px 10px 4px #B8B8B8;
+}
+#infoframe {
+	border-style: none;
+	border-color: #808080;
+	padding-top: 20px;
+	padding-bottom: 20px;
+	padding-right: 20px;
+	padding-left: 20px;
+	margin-top: 0px;
+	margin-right: 0px;
+	margin-bottom: 0px;
+	margin-left: 0px;
+}
+#mainjumbo {
+	background-image: url(url);
+}
+#globaledit {
+	border-style: none;
+	border-color: #808080;
+	padding-top: 20px;
+	padding-bottom: 20px;
+	padding-right: 20px;
+	padding-left: 20px;
+	margin-top: 0px;
+	margin-right: 0px;
+	margin-bottom: 0px;
+	margin-left: 0px;
+	-webkit-box-shadow: 6px 6px 10px 4px #B8B8B8;
+	box-shadow: 6px 6px 10px 4px #B8B8B8;
+}
+.defaultbutton {
+	-webkit-box-shadow: 2px 2px 5px 2px;
+	box-shadow: 2px 2px 5px 2px;
+}
+
+
+
+
+
+
+
+
+@media (max-width: 767px) {
+  .navbar-default .navbar-nav .open .dropdown-menu > li > a {
+    color: #000000;
+  }
+  .navbar-default .navbar-nav .open .dropdown-menu > li > a:hover,
+  .navbar-default .navbar-nav .open .dropdown-menu > li > a:focus {
+    color: #08034e;
+  }
+  .navbar-default .navbar-nav .open .dropdown-menu > .active > a,
+  .navbar-default .navbar-nav .open .dropdown-menu > .active > a:hover,
+  .navbar-default .navbar-nav .open .dropdown-menu > .active > a:focus {
+    color: #08034e;
+    background-color: #7dd985;
+  }
+}
+#inputdesc {
+	text-align: right;
+	width: 130px;
+	background-color: #b2ffb8;
+	color: #000000;
+}
+
+#inputdescsm {
+	text-align: right;
+	width: 100px;
+	background-color: #b2ffb8;
+	color: #000000;
+}
+
+.defaultbgcolor {
+	background-color: #b2ffb8;
+	color: #000000;
+}
+
+.defaultbgcolor:hover,
+.defaultbgcolor:focus {
+  background-color: #7dd985;
+}
+
+.form-control {
+	width: auto;
+}
+#globalinfo {
+	border-style: none;
+	border-color: #808080;
+	padding-top: 20px;
+	padding-bottom: 20px;
+	padding-right: 20px;
+	padding-left: 20px;
+	margin-top: 0px;
+	margin-right: 0px;
+	margin-bottom: 0px;
+	margin-left: 0px;
+	-webkit-box-shadow: 6px 6px 10px 4px #B8B8B8;
+	box-shadow: 6px 6px 10px 4px #B8B8B8;
+}

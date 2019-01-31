@@ -73,6 +73,7 @@ struct tmpstr {
 struct flexiPriv {
 	// MySQL handler
 	struct tmpstr *envfrom;	// envelope from address
+	struct tmpstr *hostnm;	// connecting host
 	sfsistat rv;		// return value
 	MYSQL *my;		// MySQL Pointer
 	struct rcpt *rcpt;	// List of envelope recipients
@@ -80,6 +81,7 @@ struct flexiPriv {
 	struct hdrs *mlhd;	// Message header lines
 	struct tmpstr *myq;	// buffer for temporary use, mysqlquery
 	struct tmpstr *tmp;	// buffer for temporary use
+	char datetmp[10];	// current date for temporary recipient FMT "DYYYYMMDD"
 };
 
 struct tmpstr *scaleTmp(str,len)
@@ -126,7 +128,7 @@ MYSQL *openMysql()
     }
 
     // TODO: move parameters to config file or command line options
-    if (!(mysql_real_connect(my,DBSRV,DBUSR,DBPW,DBNAME,0,NULL,0))) {
+    if (!(mysql_real_connect(my,DBSRV,DBUSR,DBPW,DBNAME,DBPORT,NULL,0))) {
 	fprintf(stderr,"%s\n",mysql_error(my));
 	doLog(LOG_CRIT,(char *)mysql_error(my));
 	cleanup();
@@ -255,39 +257,18 @@ char *myquery(struct flexiPriv *priv, char *fmt, ...)
 #endif
     va_start(args,fmt);
     if (priv->myq) {
-#ifdef DEBUG
-	fprintf(stderr,"Using previous query buffer len %ld\n",priv->myq->len);
-#endif
 	qlen=vsnprintf(priv->myq->str,priv->myq->len,fmt,args);
-#ifdef DEBUG
-	fprintf(stderr,"Formatting done ... %ld\n",qlen);
-#endif
     }
     else {
-#ifdef DEBUG
-	fprintf(stderr,"New query buffer needed - ");
-#endif
 	qlen=vsnprintf(&dummy,0,fmt,args);
-#ifdef DEBUG
-	fprintf(stderr,"determined %ld bytes\n",qlen);
-#endif
     }
     if (qlen>(priv->myq?priv->myq->len:0)) {
-#ifdef DEBUG
-	fprintf(stderr,"Need to extend query buffer\n");
-#endif
 	qlen=qlen+3072;		// extend allocation in 4k steps (scaleTmp adds 1k)
 	priv->myq=scaleTmp(priv->myq,qlen);
 	if (priv->myq) {
 	    va_end(args);
 	    va_start(args,fmt);
-#ifdef DEBUG
-	    fprintf(stderr,"Formatting ... ");
-#endif
 	    qlen=vsnprintf(priv->myq->str,priv->myq->len,fmt,args);
-#ifdef DEBUG
-	    fprintf(stderr,"done ... \n");
-#endif
 	}
 	else {
 	    doLog(LOG_CRIT,"malloc failed for myq");
@@ -300,14 +281,18 @@ char *myquery(struct flexiPriv *priv, char *fmt, ...)
 #endif
     }
     va_end(args);
-#ifdef DEBUG
-    fprintf(stderr,"myquery finished\n");
-#endif
     return(priv->myq->str);
 }
 
-int writeLog(struct flexiPriv *priv)
+int writeLog(struct flexiPriv *priv,int user, char *host, char *from, char *to, char *subject, int rule, char action)
 {
+    char *myqp;
+    myqp=myquery(priv,"insert into log values(%d,%d,%d,\"%s\",\"%s\",\"%s\",'%c',\"%s\")",(int)time(NULL),user,rule,
+	from,to,subject,action,host);
+    //fprintf(stderr,"%s\n",myqp);
+    if (myqp) {
+	mysql_query(priv->my,myqp);
+    }
     return(0);
 }
 
@@ -333,6 +318,9 @@ tmfi_connect(ctx,hostname,hostaddr)
 	MYSQL_ROW row;
 	sfsistat rv=0;
 	struct flexiPriv *priv;
+	char hostnm[MAXHEADERV];
+	time_t cur;
+	struct tm *tm;
 
 	res=NULL;
 #ifdef DEBUG
@@ -351,6 +339,11 @@ tmfi_connect(ctx,hostname,hostaddr)
 	    smfi_setpriv(ctx,priv);
 	    priv->my=openMysql();		// get DB link
 	}
+
+	cur=time(NULL);
+	tm=localtime(&cur);
+	sprintf(priv->datetmp,"D%04d%02d%02d",tm->tm_year,tm->tm_mon+1,tm->tm_mday);
+
 
 	if (hostaddr->sa_family==AF_INET) {	// v4 address
 #ifdef WRITELOG
@@ -401,10 +394,13 @@ size_t s;
 		    	(s4->sin_addr.s_addr&0xff00)>>8,
 		    	(s4->sin_addr.s_addr&0xff));
 		    priv->hdrs=newHdr(priv,priv->hdrs,"X-flexi-rule",myhv);
-		    if (row[1][0]=='B') 	// blacklisted, reject connection
+		    snprintf(hostnm,MAXHEADERV,"IPv4:%s",myhv);
+		    if (row[1][0]=='B') { 	// blacklisted, reject connection
 			priv->rv=rv=SMFIS_REJECT;
-		    else if (row[1][0]=='W')	// accept unconditionally
+		    }
+		    else if (row[1][0]=='W') {	// accept unconditionally
 			priv->rv=rv=SMFIS_ACCEPT;
+		    }
 		    else priv->rv=rv=SMFIS_CONTINUE;
 		    }
 	    }
@@ -426,6 +422,8 @@ size_t s;
 	    doLog(LOG_INFO,"Unexpected connection address family");
 	    return(SMFIS_TEMPFAIL);		// maybe we shouldn't TEMPFAIL?
 	}
+	priv->hostnm=scaleTmp(priv->hostnm,strlen(hostname)*4);
+	mysql_real_escape_string_quote(priv->my,priv->hostnm->str,hostname,strlen(hostname),'\'');
 	if (rv==0 || rv==SMFIS_CONTINUE) {	// continue checking, now hostname with pattern/regexp
 	    //       if present. So if - at same priority - a blacklist entry matches, this counts
 	    //       Same for Whitelist, and finally just continue checking
@@ -446,15 +444,20 @@ select id,action from bwlist where field='H' and\
 		row=mysql_fetch_row(res);
 		sprintf(myhv,"bwlist.id=%s/%s/%s",row[0],row[1],hostname);
 		priv->hdrs=newHdr(priv,priv->hdrs,"X-flexi-rule",myhv);
+		snprintf(hostnm,MAXHEADERV,"%s",hostname);
 		if (row[1][0]=='B') 	// blacklisted, reject connection
 		    priv->rv=rv=SMFIS_REJECT;
 		else if (row[1][0]=='W')	// accept unconditionally
 		    priv->rv=rv=SMFIS_ACCEPT;
+		else priv->rv=rv=SMFIS_CONTINUE;
 	    }
 #ifdef DEBUG
 	    fprintf(stderr,"finishing mysql\n");
 #endif
 	    if (res) mysql_free_result(res),res=NULL;
+	}
+	if (rv==SMFIS_REJECT) { // || rv==SMFIS_ACCEPT) {}
+	    writeLog(priv,0,hostnm,"","","",atoi(row[0]),(rv==SMFIS_REJECT?'D':'A'));
 	}
 	return((rv!=SMFIS_REJECT)?SMFIS_CONTINUE:rv);	// reject if blacklisted, otherwise continue
 }
@@ -513,6 +516,9 @@ select id,action from bwlist where field='E' and \
 	    priv->rv=SMFIS_ACCEPT;
     }
     if (res) mysql_free_result(res),res=NULL;
+    if (priv->rv==SMFIS_REJECT) { // || rv==SMFIS_ACCEPT) 
+	writeLog(priv,0,helo,"","","",atoi(row[0]),(priv->rv==SMFIS_REJECT?'D':'A'));
+    }
     return((priv->rv!=SMFIS_REJECT)?SMFIS_CONTINUE:priv->rv);	// reject if blacklisted, otherwise continue
 }
 
@@ -571,6 +577,7 @@ tmfi_close(ctx)
 	if (priv->myq) free(priv->myq);
 	if (priv->tmp) free(priv->tmp);
 	if (priv->envfrom) free(priv->envfrom);
+	if (priv->hostnm) free(priv->hostnm);
 	if (priv->my) mysql_close(priv->my),mysql_thread_end();
 	free((void *)priv);
 	priv=NULL;
@@ -627,6 +634,8 @@ struct tmpstr *buildUHdrs(struct flexiPriv *priv,struct tmpstr *hdrl)
     return(hdrl);
 }
 
+// EOM - Message complete, process filter settings to determine whether
+// the mail is delivered or not.
 sfsistat
 tmfi_eom(ctx)
      SMFICTX *ctx;
@@ -651,24 +660,25 @@ tmfi_eom(ctx)
     GETPRIV;
 #ifdef WRITELOG
 {
-	fputc((int)'M',fh);
-	fwrite(&priv,sizeof(void *),1,fh);
-	fflush(fh);
+    fputc((int)'M',fh);
+    fwrite(&priv,sizeof(void *),1,fh);
+    fflush(fh);
 }
 #endif
     now=time(NULL);				// get current timestamp
     hsender=scaleTmp(hsender,1);		// create headersender tmp string
     subject=scaleTmp(subject,10);
     subject->str[0]=0;
-//    smfi_delrcpt(ctx,"garry@test.glendown.de");
-//    smfi_addrcpt(ctx,"root@test.glendown.de");
+#ifdef DEBUG
+    fprintf(stderr,"EOM received\n");
+#endif
     if (priv->rv!=SMFIS_REJECT) {	// message should not yet be rejected, process rules
 	hdrs=priv->mlhd;
 	while (hdrs) {
 	    if (!strcasecmp(hdrs->headerf,"subject")) {
-		subject=scaleTmp(subject,strlen(hdrs->headerv)*4);
-		mysql_real_escape_string_quote(priv->my,subject->str,hdrs->headerv,strlen(hdrs->headerv),'\'');
-		//fprintf(stderr,"Converted subject to mysql: %s\n",subject->str);
+	    subject=scaleTmp(subject,strlen(hdrs->headerv)*4);
+	    mysql_real_escape_string_quote(priv->my,subject->str,hdrs->headerv,strlen(hdrs->headerv),'\'');
+	    //fprintf(stderr,"Converted subject to mysql: %s\n",subject->str);
 	    }
 	    // process the "from:" header as additional sender address
 	    if (!strcasecmp(hdrs->headerf,"from")) {
@@ -677,7 +687,7 @@ tmfi_eom(ctx)
 		mysql_real_escape_string_quote(priv->my,sender->str,hdrs->headerv,strlen(hdrs->headerv),'\'');
 		if (strcasecmp(priv->envfrom->str,sender->str)) {	// different from envelope?
 		    snprintf(hsender->str,hsender->len,
-		    "(('%s' like concat('%%',sender,'%%') and sendertype='P') or ('%s' rlike sender and sendertype='R')) or ",
+		    "(('%s' like sender and sendertype='P') or ('%s' rlike sender and sendertype='R')) or ",
 		    sender->str,sender->str);
 		}
 	    }
@@ -686,19 +696,22 @@ tmfi_eom(ctx)
 	hdrf=buildUHdrs(priv,hdrf);		// hdrf->str contains finished list of header fields for sql "in (...)" command
 	// do this for all recipients
 	rcpt=priv->rcpt;
-	while (rcpt) {
+	    while (rcpt) {
 #ifdef DEBUG
 	    fprintf(stderr,"Processing recipient %s\n",rcpt->email);
 #endif
 	    priv->tmp=scaleTmp(priv->tmp,strlen(rcpt->email)*4);
 	    mysql_real_escape_string_quote(priv->my,priv->tmp->str,rcpt->email,strlen(rcpt->email),'\'');
+	    // TODO: Is it even correct to add "%" to front/back of pattern if the match is pattern?
 	    myqp=myquery(priv,"\
 select * from filter where (endts=0 or endts>=%lu) and \
-(%s (('%s' like concat('%%',sender,'%%') and sendertype='P') or ('%s' rlike sender and sendertype='R'))) and \
-(('%s' like concat('%%',rcpt,'%%') and rcpttype='P') or ('%s' rlike rcpt and rcpttype='R')) and \
-(('%s' like concat('%%',subject,'%%') and subjecttype='P') or ('%s' rlike subject and subjecttype='R')) and \
-(headerf in (%s,'') or headerf is NULL) order by prio",now,hsender->str,priv->envfrom->str,priv->envfrom->str,
-	    priv->tmp->str,priv->tmp->str,subject->str,subject->str,hdrf->str);
+(%s (('%s' like sender and sendertype='P') or ('%s' rlike sender and sendertype='R'))) and \
+(('%s' like rcpt and rcpttype='P') or ('%s' rlike rcpt and rcpttype='R')) and \
+(('%s' like subject and subjecttype='P') or ('%s' rlike subject and subjecttype='R')) \
+order by prio",now,hsender->str,priv->envfrom->str,priv->envfrom->str,
+	    priv->tmp->str,priv->tmp->str,subject->str,subject->str /* ,hdrf->str*/);
+// TODO: Need to fix the headers:
+// and (headerf in (%s,'') or headerf is NULL) order by prio",now,hsender->str,priv->envfrom->str,priv->envfrom->str,
 	    //fprintf(stderr,"%s\n",myqp);
 	    rows=getData(priv->my,myqp,&res);
 	    //fprintf(stderr,"%s\n%d rows\n",myqp,rows);
@@ -709,63 +722,86 @@ select * from filter where (endts=0 or endts>=%lu) and \
 		    mysql_real_escape_string_quote(priv->my,hdrv->str,row[FILT_headerv],safe_strlen(row[FILT_headerv]),'\'');
 		    hdrs=priv->mlhd;
 		    while (hdrs && !match) {
-			if (!(strcasecmp(hdrs->headerf,row[FILT_headerf]))) {	// header matches
-			    switch (row[FILT_headertype][0]) {
-				case 'P':
-				    myqp=myquery(priv,"select '%s' like '%s'",hdrs->hdrv->str,hdrv->str);
-				    break;;
-				case 'R':
-				    myqp=myquery(priv,"select '%s' rlike '%s'",hdrs->hdrv->str,hdrv->str);
-				    break;;
-			    }
-			    rows2=getData(priv->my,myqp,&res2);			// let mysql do the work ;)
-			    if (rows2==1) {
-				row2=mysql_fetch_row(res2);
-				if (row2[0][0]=='1') {
-				    match=1;
-				}
-			    }
-			    if (res2) mysql_free_result(res2),res2=NULL;
+		    if (!(strcasecmp(hdrs->headerf,row[FILT_headerf]))) {	// header matches
+			switch (row[FILT_headertype][0]) {
+			case 'P':
+			    myqp=myquery(priv,"select '%s' like '%s'",hdrs->hdrv->str,hdrv->str);
+			    break;;
+			case 'R':
+			    myqp=myquery(priv,"select '%s' rlike '%s'",hdrs->hdrv->str,hdrv->str);
+			    break;;
 			}
-			hdrs=hdrs->next;
+			rows2=getData(priv->my,myqp,&res2);			// let mysql do the work ;)
+			if (rows2==1) {
+			    row2=mysql_fetch_row(res2);
+			    if (row2[0][0]=='1') {
+				match=1;
+			    }
+			}
+			if (res2) mysql_free_result(res2),res2=NULL;
+		    }
+		    hdrs=hdrs->next;
 		    }
 		}
 		else match=1;						// no additional matches necessary
 	    }
-	    if (res) mysql_free_result(res),res=NULL;
 	    if (match) {						// were there any matches?
 		switch (row[FILT_action][0]) {				// yup, get to work
 		    case 'F':						// use different recipient address
 			sprintf(tmp,"matched forward rule %s",row[FILT_id]);
 			priv->hdrs=newHdr(priv,priv->hdrs,"X-flexi-rule",tmp);
-			priv->hdrs=newHdr(priv,priv->hdrs,"X-flexi-newrcpt",row[FILT_forward]);
+			// priv->hdrs=newHdr(priv,priv->hdrs,"X-flexi-newrcpt",row[FILT_forward]);  // TODO: why doesn't this work???
+			sprintf(tmp,"%s",row[FILT_forward]);
+			priv->hdrs=newHdr(priv,priv->hdrs,"X-flexi-newrcpt",tmp);
 			smfi_delrcpt(ctx,rcpt->email);			// remove original recipient
-			smfi_addrcpt(ctx,row[FILT_forward]);		// set new recipient TODO: allow multiple?
+			//smfi_addrcpt(ctx,row[FILT_forward]);		// set new recipient TODO: allow multiple?
+			smfi_addrcpt(ctx,tmp);		// set new recipient TODO: allow multiple?
 			rcpts++;
-		    	break;;
+			if (strlen(row[FILT_tag])) {
+			//    priv->hdrs=newHdr(priv,priv->hdrs,"X-flexi-tag",row[FILT_tag]);
+			}
+			break;;
 		    case 'A':						// accept original recipient
 			sprintf(tmp,"matched forward rule %s",row[FILT_id]);
 			priv->hdrs=newHdr(priv,priv->hdrs,"X-flexi-rule",tmp);
+			if (strlen(row[FILT_tag])) {
+			 //   priv->hdrs=newHdr(priv,priv->hdrs,"X-flexi-tag",row[FILT_tag]);
+			}
 			rcpts++;
-		    	break;;
+			break;;
 		    case 'D':
 			smfi_delrcpt(ctx,rcpt->email);			// remove recipient
 #ifdef DEBUG
 			fprintf(stderr,"removing rcpt %s\n",rcpt->email);
 #endif
-		    	break;;
+			break;;
 		}
+#ifdef DEBUG
+		fprintf(stderr,"Writing log ...\n");
+		fprintf(stderr,"sender %s\n",sender->str);
+		fprintf(stderr,"from %s\n",priv->envfrom->str);
+		fprintf(stderr,"action %c\n",row[FILT_action][0]);
+		fprintf(stderr,"to %s\n",row[FILT_forward]);
+		fprintf(stderr,"to %s\n",rcpt->email);
+		fprintf(stderr,"to %s\n",(row[FILT_action][0]=='F'?row[FILT_forward]:rcpt->email));
+		fprintf(stderr,"subject %s\n",subject->str);
+		fprintf(stderr,"rule %d\n",atoi(row[0]));
+#endif
+		writeLog(priv,atoi(row[0]),priv->hostnm->str,priv->envfrom->str,//(row[FILT_action][0]=='F'?row[FILT_forward]:rcpt->email)
+			rcpt->email,subject->str,atoi(row[1]),row[FILT_action][0]);
 	    }
 	    else {							// no filters for this recipient, default action deliver
 		priv->hdrs=newHdr(priv,priv->hdrs,"X-flexi-status","processed - no filter matches");
+		writeLog(priv,0,priv->hostnm->str,priv->envfrom->str,rcpt->email,subject->str,0,'a');
 		rcpts++;
 	    }
+	    if (res) mysql_free_result(res),res=NULL;
 	    rcpt=rcpt->next;						// next recipient (if any)
 	}
 #ifdef DEBUG
-	    fprintf(stderr,"Final recipients: %d\n",rcpts);
+	fprintf(stderr,"Final recipients: %d\n",rcpts);
 #endif
-    	if (rcpts>0) {
+	if (rcpts>0) {
 	    rv=SMFIS_ACCEPT;
 	}
 	else {
@@ -859,7 +895,8 @@ size_t s;
     myqp=myquery(priv,"\
 select id,action from bwlist where field='F' and \
 ((matchtype='P' and '%s' like pattern) or \
-(matchtype='R' and '%s' rlike pattern)) order by prio,action desc limit 1",priv->envfrom->str,priv->envfrom->str);
+(matchtype='R' and '%s' rlike pattern)) order by prio,action desc limit 1",
+	priv->envfrom->str,priv->envfrom->str);
 
     rows=getData(priv->my,myqp,&res);
     if (rows==1) {
@@ -876,6 +913,9 @@ select id,action from bwlist where field='F' and \
 #ifdef DEBUG
     fprintf(stderr,"Return: %d\n",(priv->rv!=SMFIS_REJECT)?SMFIS_CONTINUE:priv->rv);	// reject if blacklisted, otherwise continue
 #endif
+    if (priv->rv==SMFIS_REJECT) { // || rv==SMFIS_ACCEPT) 
+	writeLog(priv,0,priv->hostnm->str,from[0],"","",atoi(row[0]),(priv->rv==SMFIS_REJECT?'D':'A'));
+    }
     return((priv->rv!=SMFIS_REJECT)?SMFIS_CONTINUE:priv->rv);	// reject if blacklisted, otherwise continue
 }
 
@@ -942,7 +982,7 @@ select id,action from bwlist where field='T' and \
 	// no black/whitelist rule for this recipient - check if recipient is known 
 	// can't decide on the action yet, though, as not all parameters are queried
 	myqp=myquery(priv,"\
-select action,rcpt,prio from filter where (('%s' like concat('%%',rcpt,'%%') and rcpttype='P') or ('%s' rlike rcpt and rcpttype='R')) order by prio limit 1",
+select action,rcpt,prio from filter where (('%s' like rcpt and rcpttype='P') or ('%s' rlike rcpt and rcpttype='R')) order by prio limit 1",
 		to[0],to[0]);
 	rows=getData(priv->my,myqp,&res);
 	if (rows!=1) {
@@ -977,6 +1017,9 @@ select action,rcpt,prio from filter where (('%s' like concat('%%',rcpt,'%%') and
     if (res) mysql_free_result(res),res=NULL;
     if (rv!=SMFIS_REJECT) 				// remember rcpt
 	priv->rcpt=newRcpt(priv->rcpt,to[0]);
+    if (priv->rv==SMFIS_REJECT) { // || rv==SMFIS_ACCEPT) 
+	writeLog(priv,0,priv->hostnm->str,"",to[0],"",atoi(row[0]),(priv->rv==SMFIS_REJECT?'D':'A'));
+    }
     return((rv!=SMFIS_REJECT)?SMFIS_CONTINUE:rv);	// reject rcpt if blacklisted, otherwise continue
 }
 

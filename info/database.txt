@@ -1,0 +1,59 @@
+Table "bwlist"
+==============
+
+black/whitelist of entries
+
+field:	compare which data
+	4	IPv4 address, use patternnum / patternmask
+	6	IPv6 address (todo)
+	H	hostname
+	E	HELO hostname
+	F	Envelope From
+	T	Envelope To
+
+matchtype: how to match field data
+	B	binary compare (for IPv4 comparison)
+	P	pattern match (MySQL style)
+	R	regexp compare (MySQL style)
+
+pattern: the ascii pattern to match
+
+patternnum: 64 bit value
+
+patternmask: 64 bit value
+
+action:	what to do if the values match
+	B	unconditional blacklist
+	W	unconditional whitelist
+	C	continue processing (allows for e.g. processing a single IP out of a black/whitelisted subnet)
+
+prio: priority 0-255, lower values are matched before higher values
+
+
+Table "filter"
+==============
+
+List of individual filters, defined per user
+
+|-------------+-------------------------------------------------------|
+| Field       | Usage                                                 |
+|-------------+-------------------------------------------------------|
+| userid      | Reference to user table for per-user-specific entries |
+| id          | filter id for primary key                             |
+| rcpt        | receipient address                                    |
+| sender      | sender address                                        |
+| subject     | the message subject from header                       |
+| headerf     | header field                                          |
+| headerv     | header value                                          |
+| rcpttype    | how to match recipient, pattern or regexp (P/R)       |
+| sendertype  | same for sender adddress                              |
+| subjecttype | same for subject                                      |
+| headertype  | same for headerv                                      |
+| action      | how to act on match (Reject R/Accept A)               |
+| resultcode  | custom results code for SMTP                          |
+| xresultcode | extended results code for SMTP                        |
+| resultmsg   | verbose error message for SMTP                        |
+| prio        | sequence in which to go through the filters           |
+| endts       | filter is valid until Timestamp ts                    |
+| forward     | forward to this email insted of original recipient    |
+|-------------+-------------------------------------------------------|

@@ -1,0 +1,17 @@
+Here are some errors I came accross while writing milter-tmpmail
+
+* when connecting to the server via IPv6, the connection to the milter was
+  immediately terminated with the error message:
+
+	Milter: connect, ending
+
+  (with milter debugging enabled in sendmail)
+
+> This was caused by NETINET6 not being defined by default in the sendmail
+  source. I probably missed that somewhere, so I hacked the definition
+  into the file include/sm/gen.h with
+
+  #define NETINET6 1
+
+  After rebuilding the library, subsequent connections with IPv6 worked
+  fine. I reckon this ought to be fixed more cleanly ;)
